@@ -135,13 +135,15 @@ class Predictor:
         total_driver_impact_scaled = sum(driver_contribution_scaled.values())
 
         # Step 6: Convert driver contribution to original scale
-        feature_stds = (
-            self.preprocessor.feature_scaler.scale_
-        )  # (n_features, ) Standatd Dev of features
+        # feature_stds = (
+        #     self.preprocessor.feature_scaler.scale_
+        # )  # (n_features, ) Standatd Dev of features
+        target_std = self.preprocessor.target_scaler.scale_[0]
         driver_contribution_original = {}
         for i, feature_name in enumerate(self.feature_cols):
             contrib_scaled = driver_contribution_scaled[feature_name]
-            contrib_original = contrib_scaled * feature_stds[i]
+            # contrib_original = contrib_scaled * feature_stds[i]
+            contrib_original = contrib_scaled * target_std
             driver_contribution_original[feature_name] = float(contrib_original)
         total_driver_impact_original = sum(driver_contribution_original.values())
 
@@ -256,7 +258,8 @@ class Predictor:
             contributions["embedding_contribution"].cpu().numpy()
         )
         feature_breakdown_scaled = contributions["feature_breakdown"]
-        feature_stds = self.preprocessor.feature_scaler.scale_
+        # feature_stds = self.preprocessor.feature_scaler.scale_
+        target_std = self.preprocessor.target_scaler.scale_[0]
 
         # Step 8: VECTORIZED unpacking
         # Convert all driver contributions to DataFrame at once
@@ -273,7 +276,8 @@ class Predictor:
                 f"driver_{feat}_original": feature_breakdown_scaled[f"feature_{i}"]
                 .cpu()
                 .numpy()
-                * feature_stds[i]
+                # * feature_stds[i]
+                * target_std
                 for i, feat in enumerate(self.feature_cols)
             }
         )

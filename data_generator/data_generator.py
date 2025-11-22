@@ -341,8 +341,15 @@ for month_idx, date in enumerate(dates):
 
         # Pack size effect (larger packs sell fewer units but more volume)
         pack_demand_factor = {
-            "6oz": 1.6, "8oz": 1.5, "12oz": 1.3, "16oz": 1.0,
-            "20oz": 0.9, "24oz": 0.8, "32oz": 0.6, "48oz": 0.45, "64oz": 0.4,
+            "6oz": 1.6,
+            "8oz": 1.5,
+            "12oz": 1.3,
+            "16oz": 1.0,
+            "20oz": 0.9,
+            "24oz": 0.8,
+            "32oz": 0.6,
+            "48oz": 0.45,
+            "64oz": 0.4,
         }
 
         # Baseline includes: inherent demand + seasonal pattern + trend
@@ -360,7 +367,7 @@ for month_idx, date in enumerate(dates):
             "Southeast": 0.95,
             "Midwest": 1.0,
             "Southwest": 0.9,
-            "West": 1.05
+            "West": 1.05,
         }
         baseline_sales *= regional_baseline_mult[region]
 
@@ -375,14 +382,20 @@ for month_idx, date in enumerate(dates):
         precip_impact = -30 * (precipitation - 3)  # Rain reduces sales
 
         # Price driver (elasticity-based, additive)
-        price_elasticity = -1.5 if segment == "Economy" else -1.2 if segment == "Mid-tier" else -0.8
+        price_elasticity = (
+            -1.5 if segment == "Economy" else -1.2 if segment == "Mid-tier" else -0.8
+        )
         price_deviation_pct = (price / base_price) - 1  # % deviation from base price
         price_impact = base_demand * 2.0 * price_deviation_pct * abs(price_elasticity)
 
         # Promotional drivers (properly scaled to match baseline)
         tv_impact = 8 * tv_spend  # Each $1K TV spend adds 8 units
-        digital_impact = 10 * digital_spend  # Digital is more efficient - 10 units per $1K
-        trade_impact = 12 * trade_spend  # Trade promotions most effective - 12 units per $1K
+        digital_impact = (
+            10 * digital_spend
+        )  # Digital is more efficient - 10 units per $1K
+        trade_impact = (
+            12 * trade_spend
+        )  # Trade promotions most effective - 12 units per $1K
         discount_impact = 80 * discount_pct  # Each 1% discount adds 80 units
 
         # Distribution driver (deviation from segment baseline)
@@ -396,7 +409,9 @@ for month_idx, date in enumerate(dates):
 
         # Macroeconomic drivers (additive impacts, scaled up)
         gdp_impact = 100 * (gdp - 100) / 10  # GDP deviation from 100
-        unemployment_impact = -150 * (unemployment - 4)  # High unemployment hurts significantly
+        unemployment_impact = -150 * (
+            unemployment - 4
+        )  # High unemployment hurts significantly
         cci_impact = 50 * (cci - 100) / 10  # Consumer confidence
 
         # Total driver contribution (sum of all drivers)
