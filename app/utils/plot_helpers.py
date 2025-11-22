@@ -335,3 +335,87 @@ def plot_feature_correlation_heatmap(df):
     )
 
     return fig
+
+
+def plot_stacked_decomposition(df):
+    """
+    Create stacked bar chart of baseline + drivers with total prediction line.
+
+    Args:
+        df: Results dataframe (filtered)
+
+    Returns:
+        plotly.graph_objects.Figure
+    """
+    # Aggregate by date and dataset_split
+    # Sum up baseline, drivers, and prediction
+    driver_cols = [
+        col
+        for col in df.columns
+        if col.startswith("driver_") and col.endswith("_original")
+    ]
+
+    agg_cols = ["baseline_original", "prediction"] + driver_cols
+
+    agg_df = (
+        df.groupby(["date", "dataset_split"])[agg_cols]
+        .sum()
+        .reset_index()
+        .sort_values("date")
+    )
+
+    fig = go.Figure()
+
+    # 1. Stacked Bars for Baseline and Drivers
+    # Baseline
+    fig.add_trace(
+        go.Bar(
+            name="Baseline",
+            x=agg_df["date"],
+            y=agg_df["baseline_original"],
+            marker_color="#1f77b4",
+            opacity=0.7,
+        )
+    )
+
+    # Drivers (using a color palette)
+    colors = px.colors.qualitative.Plotly
+    for i, col in enumerate(driver_cols):
+        feature_name = col.replace("driver_", "").replace("_original", "")
+        fig.add_trace(
+            go.Bar(
+                name=feature_name.title(),
+                x=agg_df["date"],
+                y=agg_df[col],
+                marker_color=colors[i % len(colors)],
+                opacity=0.7,
+            )
+        )
+
+    # 2. Line Chart for Total Prediction (colored by split)
+    split_colors = {"train": "#2ca02c", "val": "#ff7f0e", "test": "#d62728"}
+
+    for split in ["train", "val", "test"]:
+        split_data = agg_df[agg_df["dataset_split"] == split]
+        if len(split_data) > 0:
+            fig.add_trace(
+                go.Scatter(
+                    name=f"Total Predicted ({split.title()})",
+                    x=split_data["date"],
+                    y=split_data["prediction"],
+                    mode="lines",
+                    line=dict(color=split_colors[split], width=3),
+                )
+            )
+
+    fig.update_layout(
+        title="Stacked Decomposition: Baseline + Drivers vs Total Prediction",
+        xaxis_title="Date",
+        yaxis_title="Sales Contribution",
+        barmode="relative",  # Allows negative values to stack correctly below 0
+        height=500,
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+
+    return fig
