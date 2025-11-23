@@ -73,6 +73,7 @@ def main():
         vocab_sizes=vocab_sizes,
         embedding_dims=config.EMBEDDING_DIMS,
         n_features=len(config.FEATURE_COLS),
+        constraint_indices=preprocessor.constraint_indices,
     )
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total Parameters: {total_params:,}")

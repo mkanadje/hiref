@@ -1,9 +1,13 @@
 import torch
 import torch.nn as nn
 
+from models.constrained_linear import ConstrainedLinear
+
 
 class HierarchicalModel(nn.Module):
-    def __init__(self, vocab_sizes, embedding_dims, n_features):
+    def __init__(
+        self, vocab_sizes, embedding_dims, n_features, constraint_indices=None
+    ):
         super().__init__()
         self.vocab_sizes = vocab_sizes
         self.embedding_dims = embedding_dims
@@ -17,7 +21,52 @@ class HierarchicalModel(nn.Module):
             }
         )
         total_embedding_dim = sum(self.embedding_dims.values())
-        self.linear = nn.Linear(total_embedding_dim + n_features, 1)
+        # self.linear = nn.Linear(total_embedding_dim + n_features, 1)
+        if constraint_indices is not None:
+            # constraint_indices apply to FEATURES only (last n_features dimensions)
+            # We need to offset indices by total_embedding_dim
+            adjusted_constraints = self._adjust_constraint_indices(
+                constraint_indices, total_embedding_dim
+            )
+            self.linear = ConstrainedLinear(
+                total_embedding_dim + n_features,
+                1,
+                constraint_indices=adjusted_constraints,
+            )
+            print(f"Using ConstrainedLinear layer with business logic constraints")
+        else:
+            self.linear = nn.Linear(total_embedding_dim + n_features, 1)
+            print("Using standard Linear layer (unconstrained weights)")
+
+    def _adjust_constraint_indices(self, constraint_indices, embedding_dim):
+        """
+        Adjust constraint indices to account for embedding dimensions.
+
+        Constraint indices from confi refer to FEATURE positions.
+        but in linear layer, features come AFTER embeddings
+        Example:
+            - Embedding: dimensions 0-34 (35 total)
+            - Features: dimensions 35-46 (12 total)
+            - Feature index 0 (temperature) -> linear layer index 35
+
+        Args:
+            constraint_indices: dict with "positive_indices", "negative_indices", "unconstrained_indices"
+
+        Returns:
+            dict with adjusted indices
+        """
+        return {
+            "positive_indices": [
+                idx + embedding_dim for idx in constraint_indices["positive_indices"]
+            ],
+            "negative_indices": [
+                idx + embedding_dim for idx in constraint_indices["negative_indices"]
+            ],
+            "unconstrained_indices": [
+                idx + embedding_dim
+                for idx in constraint_indices["unconstrained_indices"]
+            ],
+        }
 
     def forward(self, hierarchy_ids, features):
         """
@@ -63,8 +112,12 @@ class HierarchicalModel(nn.Module):
                 - 'embedding_weights': tensor of shape (35,)
                 - 'feature_weights': tensor of shape (12,)
         """
-        weights = self.linear.weight.data.squeeze()  # (47,)
-        bias = self.linear.bias.data.item()  # scaler
+        if isinstance(self.linear, ConstrainedLinear):
+            weights = self.linear.get_constrained_weights().data.squeeze()
+            bias = self.linear.bias.data.item()
+        else:
+            weights = self.linear.weight.data.squeeze()  # (47,)
+            bias = self.linear.bias.data.item()  # scaler
 
         total_embedding_dim = sum(self.embedding_dims.values())  # 35
         embedding_weights = weights[:total_embedding_dim]  # (35, )
@@ -98,7 +151,10 @@ class HierarchicalModel(nn.Module):
         all_embeddings = torch.cat(embedding_list, dim=1)  # (B, 35)
         combined = torch.cat([all_embeddings, features], dim=1)  # (B, 47)
 
-        weights = self.linear.weight.data.squeeze()  # (47, )
+        if isinstance(self.linear, ConstrainedLinear):
+            weights = self.linear.get_constrained_weights().data.squeeze()
+        else:
+            weights = self.linear.weight.data.squeeze()  # (47, )
         bias = self.linear.bias.data  # scaler
 
         # calculate contributions

@@ -373,46 +373,107 @@ for month_idx, date in enumerate(dates):
 
         # -----------------------------------------------------------------
         # PART 2: DRIVER CONTRIBUTION (30%) - Time-varying factors
-        # Weather, price, promotions, macro (all additive)
-        # SCALED TO MATCH BASELINE MAGNITUDE
+        # Using realistic non-linear relationships based on business logic
         # -----------------------------------------------------------------
 
-        # Weather drivers (additive impact on units sold)
-        temp_impact = 50 * (temperature - 60)  # Hot weather boosts sales significantly
-        precip_impact = -30 * (precipitation - 3)  # Rain reduces sales
+        # =====================================================================
+        # WEATHER DRIVERS
+        # =====================================================================
 
-        # Price driver (elasticity-based, additive)
+        # Temperature: POSITIVE relationship (sigmoid curve for beverage sales)
+        # Sales increase as temperature rises, with diminishing returns at extremes
+        # Optimal range: 60-85°F
+        temp_normalized = (temperature - 60) / 25  # Normalize around 60°F
+        temp_impact = 400 * (1 / (1 + np.exp(-2 * temp_normalized)) - 0.5)
+        # Sigmoid gives smooth S-curve: cold weather = negative, hot = positive
+
+        # Precipitation: NEGATIVE relationship (exponential decay)
+        # Rain discourages shopping/consumption, with stronger effect at higher levels
+        precip_normalized = precipitation / 5  # Normalize to typical range
+        precip_impact = -200 * (1 - np.exp(-0.8 * precip_normalized))
+        # Exponential decay: light rain = mild impact, heavy rain = strong negative
+
+        # =====================================================================
+        # MACROECONOMIC DRIVERS
+        # =====================================================================
+
+        # GDP Index: POSITIVE relationship (logarithmic - diminishing returns)
+        # Economic growth helps, but marginal impact decreases
+        gdp_deviation = max(0.1, gdp - 95)  # Ensure positive for log
+        gdp_impact = 250 * np.log(gdp_deviation / 100 + 1) / np.log(1.15)
+        # Log curve: early GDP gains have bigger impact than later gains
+
+        # Unemployment: NEGATIVE relationship (exponential penalty)
+        # High unemployment sharply reduces discretionary spending
+        unemployment_normalized = (unemployment - 4) / 10  # Center at 4%
+        unemployment_impact = -350 * (np.exp(0.8 * unemployment_normalized) - 1)
+        # Exponential: each % increase hurts more than the previous
+
+        # Consumer Confidence: POSITIVE relationship (power curve)
+        # Confidence boosts spending with accelerating effect
+        cci_normalized = (cci - 80) / 40  # Normalize around typical range
+        cci_impact = 200 * np.sign(cci_normalized) * (np.abs(cci_normalized) ** 1.3)
+        # Power curve: high confidence → disproportionate boost
+
+        # =====================================================================
+        # PRICING DRIVER
+        # =====================================================================
+
+        # Price: NEGATIVE relationship (power curve for elasticity)
+        # Price increases reduce demand, with segment-specific sensitivity
         price_elasticity = (
-            -1.5 if segment == "Economy" else -1.2 if segment == "Mid-tier" else -0.8
+            -1.8 if segment == "Economy" else -1.3 if segment == "Mid-tier" else -0.9
         )
-        price_deviation_pct = (price / base_price) - 1  # % deviation from base price
-        price_impact = base_demand * 2.0 * price_deviation_pct * abs(price_elasticity)
+        price_deviation_pct = (price / base_price) - 1  # % deviation from base
+        # Power curve: small increases = linear, large increases = exponential penalty
+        price_impact = base_demand * 1.5 * np.sign(price_deviation_pct) * (
+            np.abs(price_deviation_pct) ** 1.2
+        ) * abs(price_elasticity)
 
-        # Promotional drivers (properly scaled to match baseline)
-        tv_impact = 8 * tv_spend  # Each $1K TV spend adds 8 units
-        digital_impact = (
-            10 * digital_spend
-        )  # Digital is more efficient - 10 units per $1K
-        trade_impact = (
-            12 * trade_spend
-        )  # Trade promotions most effective - 12 units per $1K
-        discount_impact = 80 * discount_pct  # Each 1% discount adds 80 units
+        # =====================================================================
+        # DISTRIBUTION DRIVER
+        # =====================================================================
 
-        # Distribution driver (deviation from segment baseline)
+        # Distribution: POSITIVE relationship (sigmoid curve)
+        # Coverage drives sales, with network effects and diminishing returns
         if segment == "Premium":
             expected_dist = 65
         elif segment == "Mid-tier":
             expected_dist = 80
         else:
             expected_dist = 90
-        distribution_impact = 50 * (distribution - expected_dist) / 10
 
-        # Macroeconomic drivers (additive impacts, scaled up)
-        gdp_impact = 100 * (gdp - 100) / 10  # GDP deviation from 100
-        unemployment_impact = -150 * (
-            unemployment - 4
-        )  # High unemployment hurts significantly
-        cci_impact = 50 * (cci - 100) / 10  # Consumer confidence
+        dist_deviation = (distribution - expected_dist) / 20
+        distribution_impact = 300 * (1 / (1 + np.exp(-2.5 * dist_deviation)) - 0.5)
+        # Sigmoid: early distribution gains = big impact, saturates near 100%
+
+        # =====================================================================
+        # PROMOTIONAL DRIVERS (ALL POSITIVE)
+        # =====================================================================
+
+        # TV Spend: POSITIVE (logarithmic - diminishing returns)
+        # Awareness saturates as spend increases
+        tv_normalized = tv_spend / 50  # Normalize to typical spend levels
+        tv_impact = 350 * np.log(tv_normalized + 1) / np.log(3)
+        # Log curve: first $10K has bigger impact than next $10K
+
+        # Digital Spend: POSITIVE (square root - moderate diminishing returns)
+        # More efficient than TV, but still saturates
+        digital_normalized = digital_spend / 30
+        digital_impact = 400 * np.sqrt(digital_normalized)
+        # Square root: better than linear, less saturation than log
+
+        # Trade Spend: POSITIVE (linear with slight power boost)
+        # Direct retailer incentives = most linear/predictable ROI
+        trade_normalized = trade_spend / 20
+        trade_impact = 380 * (trade_normalized ** 0.9)
+        # Near-linear with slight sublinearity
+
+        # Discount %: POSITIVE (exponential - accelerating returns up to a point)
+        # Discounts drive strong responses, especially at mid-range (10-20%)
+        discount_normalized = discount_pct / 20  # Normalize to typical discount
+        discount_impact = 450 * (1 - np.exp(-1.2 * discount_normalized))
+        # Exponential saturation: 5% = modest, 15% = strong, 30% = saturated
 
         # Total driver contribution (sum of all drivers)
         driver_contribution = (

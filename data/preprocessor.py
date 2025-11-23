@@ -1,7 +1,9 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
 import pickle
+import config
+from data.constraint_helper import get_constraint_indices
 
 
 class DataPreprocessor:
@@ -19,6 +21,7 @@ class DataPreprocessor:
         )
         self.target_scaler = None
         self.vocab_sizes = {}
+        self.constraint_indices = None
 
     def load_data(self, file_path):
         df = pd.read_csv(file_path)
@@ -40,12 +43,41 @@ class DataPreprocessor:
             self.vocab_sizes[col] = len(le.classes_)
 
         # Fit StandardScaler for features
-        self.feature_scaler = StandardScaler()
+        # self.feature_scaler = StandardScaler()
+        self.feature_scaler = MinMaxScaler()
         self.feature_scaler.fit(df[self.feature_cols])
 
         # Fit StandarScaler to target
         self.target_scaler = StandardScaler()
         self.target_scaler.fit(df[[self.target_col]])
+
+        # Compute constraint indices if constraints are enabled
+        if config.USE_CONSTRAINT_WEIGHTS:
+            self.constraint_indices = get_constraint_indices(
+                self.feature_cols,
+                config.POSITIVE_WEIGHT_FEATURES,
+                config.NEGATIVE_WEIGHT_FEATURES,
+            )
+            print(f"\n {'='*60}")
+            print("WEIGHT CONSTRAINT CONFIGURATION")
+            print(f"{'='*60}")
+            print(
+                f"Positive constraints({len(self.constraint_indices["positive_indices"])} features): "
+            )
+            for idx in self.constraint_indices["positive_indices"]:
+                print(f" [{idx} {self.feature_cols[idx]}]")
+            print(
+                f"Negative constraints({len(self.constraint_indices["negative_indices"])} features): "
+            )
+            for idx in self.constraint_indices["negative_indices"]:
+                print(f" [{idx} {self.feature_cols[idx]}]")
+            print(
+                f"Unconstrained constraints({len(self.constraint_indices["unconstrained_indices"])} features): "
+            )
+            for idx in self.constraint_indices["unconstrained_indices"]:
+                print(f" [{idx} {self.feature_cols[idx]}]")
+        else:
+            print("\n Weight constraint DISABLED - using standard unconstrained model")
         return self
 
     def transform(self, df):
@@ -85,28 +117,47 @@ class DataPreprocessor:
                     "feature_scaler": self.feature_scaler,
                     "target_scaler": self.target_scaler,
                     "vocab_sizes": self.vocab_sizes,
+                    "constraint_indices": self.constraint_indices,
+                    "feature_cols": self.feature_cols,
+                    "hierarchy_cols": self.hierarchy_cols,
+                    "target_col": self.target_col,
+                    "key_col": self.key_col,
+                    "date_col": self.date_col,
                 },
                 f,
             )
 
     @classmethod
     def load(cls, file_path):
-        # Create an empty instance WITHOUT calling __init__()
-        instance = cls.__new__(cls)
+        """
+        Load a saved preprocessor from disk.
+
+        Can be called as:
+        - Class method: preprocessor = DataPreprocessor.load(path)
+        - Instance method: preprocessor.load(path) returns self
+        """
         # Load pickled state
         with open(file_path, "rb") as f:
             state = pickle.load(f)
-        # Manually set the attributes (bupassing the __init__() call)
+
+        # If called on an instance (self is not None in that context),
+        # we modify the instance. Otherwise create new instance.
+        # However, classmethods don't have access to self, so we always create new
+        instance = cls.__new__(cls)
+
+        # Manually set the attributes
         instance.label_encoders = state["label_encoders"]
         instance.feature_scaler = state["feature_scaler"]
         instance.target_scaler = state["target_scaler"]
         instance.vocab_sizes = state["vocab_sizes"]
-        # Set other attributes that aren't saved but might be needed
-        instance.hierarchy_cols = list(state["label_encoders"].keys())
-        instance.feature_cols = None
-        instance.target_col = None
-        instance.key_col = None
-        instance.date_col = None
+        # Load constraint_indices (with backward compatibility for old preprocessors)
+        instance.constraint_indices = state.get("constraint_indices", None)
+        # Load column configurations (with backward compatibility)
+        instance.feature_cols = state.get("feature_cols", None)
+        instance.hierarchy_cols = state.get("hierarchy_cols", list(state["label_encoders"].keys()))
+        instance.target_col = state.get("target_col", None)
+        instance.key_col = state.get("key_col", None)
+        instance.date_col = state.get("date_col", None)
         return instance
 
     def get_vocab_sizes(self):

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hierarchical Regression Model - Training Flow</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .network-container {
+            position: relative;
+            width: 100%;
+            height: 1200px;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .embedding-box {
+            fill: #e3f2fd;
+            stroke: #1976d2;
+            stroke-width: 2;
+            rx: 8;
+        }
+
+        .table-box {
+            fill: #e3f2fd;
+            stroke: #1976d2;
+            stroke-width: 2;
+            rx: 4;
+        }
+
+        .id-box {
+            fill: #bbdefb;
+            stroke: #1976d2;
+            stroke-width: 2;
+            rx: 4;
+        }
+
+        .row-highlight {
+            fill: #ffeb3b;
+            stroke: #f57f17;
+            stroke-width: 2;
+            rx: 2;
+        }
+
+        .concat-box {
+            fill: #fff3e0;
+            stroke: #f57c00;
+            stroke-width: 2;
+            rx: 8;
+        }
+
+        .feature-box {
+            fill: #e8f5e9;
+            stroke: #388e3c;
+            stroke-width: 2;
+            rx: 8;
+        }
+
+        .linear-box {
+            fill: #fce4ec;
+            stroke: #c2185b;
+            stroke-width: 2;
+            rx: 8;
+        }
+
+        .output-box {
+            fill: #f3e5f5;
+            stroke: #7b1fa2;
+            stroke-width: 2;
+            rx: 8;
+        }
+
+        .loss-box {
+            fill: #ffebee;
+            stroke: #c62828;
+            stroke-width: 2;
+            rx: 8;
+        }
+
+        .target-box {
+            fill: #e0f2f1;
+            stroke: #00695c;
+            stroke-width: 2;
+            rx: 8;
+        }
+
+        .gradient-box {
+            fill: #fff8e1;
+            stroke: #ff8f00;
+            stroke-width: 2;
+            rx: 8;
+            stroke-dasharray: 4, 2;
+        }
+
+        .update-box {
+            fill: #e8eaf6;
+            stroke: #3949ab;
+            stroke-width: 2;
+            rx: 8;
+        }
+
+        .label {
+            font-size: 11px;
+            font-weight: 600;
+            fill: #333;
+            text-anchor: middle;
+        }
+
+        .label-large {
+            font-size: 12px;
+            font-weight: 600;
+            fill: #333;
+            text-anchor: middle;
+        }
+
+        .dim-label {
+            font-size: 9px;
+            fill: #666;
+            text-anchor: middle;
+        }
+
+        .section-label {
+            font-size: 10px;
+            fill: #999;
+            text-anchor: middle;
+            font-style: italic;
+        }
+
+        .phase-label {
+            font-size: 13px;
+            fill: #333;
+            text-anchor: middle;
+            font-weight: bold;
+        }
+
+        .arrow-forward {
+            stroke: #666;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+
+        .arrow-backward {
+            stroke: #c62828;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead-red);
+            stroke-dasharray: 6, 3;
+        }
+
+        .arrow-update {
+            stroke: #3949ab;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead-blue);
+        }
+
+        .arrow-lookup {
+            stroke: #f57f17;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead-yellow);
+        }
+
+        .formula {
+            font-size: 9px;
+            fill: #555;
+            text-anchor: middle;
+            font-family: 'Courier New', monospace;
+        }
+
+        .table-label {
+            font-size: 8px;
+            fill: #666;
+            text-anchor: middle;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Hierarchical Regression Model - Training Flow</h1>
+        <p class="subtitle">Embedding lookup, backpropagation, and gradient updates for FMCG forecasting</p>
+
+        <div class="network-container">
+            <svg viewBox="0 0 1100 1000">
+                <!-- Define arrow markers -->
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+                    </marker>
+                    <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#c62828" />
+                    </marker>
+                    <marker id="arrowhead-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#3949ab" />
+                    </marker>
+                    <marker id="arrowhead-yellow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#f57f17" />
+                    </marker>
+                </defs>
+
+                <!-- Phase 1: Embedding Table Lookup -->
+                <text x="550" y="30" class="phase-label">EMBEDDING TABLE LOOKUP</text>
+                <line x1="50" y1="40" x2="1050" y2="40" stroke="#ddd" stroke-width="1" />
+
+                <!-- Region Embedding Lookup -->
+                <text x="160" y="65" class="section-label">Region</text>
+
+                <!-- Region ID Input -->
+                <rect x="30" y="75" width="60" height="35" class="id-box" />
+                <text x="60" y="90" class="label">ID: 3</text>
+                <text x="60" y="103" class="dim-label">input</text>
+
+                <!-- Region Embedding Table -->
+                <rect x="120" y="75" width="80" height="90" class="table-box" />
+                <text x="160" y="92" class="table-label">r × 8</text>
+                <!-- Table rows -->
+                <rect x="125" y="100" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="125" y="112" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="125" y="124" width="70" height="8" class="row-highlight" />
+                <rect x="125" y="136" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="125" y="148" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <text x="210" y="130" class="table-label" font-size="7">← row 3</text>
+
+                <!-- Region Output -->
+                <rect x="230" y="100" width="70" height="40" class="embedding-box" />
+                <text x="265" y="118" class="label">e_region</text>
+                <text x="265" y="132" class="dim-label">dim: 8</text>
+
+                <!-- Arrows -->
+                <path d="M 90 92 L 115 92" class="arrow-lookup" />
+                <path d="M 200 120 L 225 120" class="arrow-forward" />
+
+                <!-- Channel Embedding Lookup -->
+                <text x="380" y="65" class="section-label">Channel</text>
+
+                <!-- Channel ID Input -->
+                <rect x="320" y="75" width="60" height="35" class="id-box" />
+                <text x="350" y="90" class="label">ID: 1</text>
+                <text x="350" y="103" class="dim-label">input</text>
+
+                <!-- Channel Embedding Table -->
+                <rect x="410" y="75" width="80" height="90" class="table-box" />
+                <text x="450" y="92" class="table-label">c × 8</text>
+                <!-- Table rows -->
+                <rect x="415" y="100" width="70" height="8" class="row-highlight" />
+                <rect x="415" y="112" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="415" y="124" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="415" y="136" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="415" y="148" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <text x="500" y="106" class="table-label" font-size="7">← row 1</text>
+
+                <!-- Channel Output -->
+                <rect x="520" y="100" width="70" height="40" class="embedding-box" />
+                <text x="555" y="118" class="label">e_channel</text>
+                <text x="555" y="132" class="dim-label">dim: 8</text>
+
+                <!-- Arrows -->
+                <path d="M 380 92 L 405 92" class="arrow-lookup" />
+                <path d="M 490 120 L 515 120" class="arrow-forward" />
+
+                <!-- Brand Embedding Lookup -->
+                <text x="670" y="65" class="section-label">Brand</text>
+
+                <!-- Brand ID Input -->
+                <rect x="610" y="75" width="60" height="35" class="id-box" />
+                <text x="640" y="90" class="label">ID: 7</text>
+                <text x="640" y="103" class="dim-label">input</text>
+
+                <!-- Brand Embedding Table -->
+                <rect x="700" y="75" width="80" height="90" class="table-box" />
+                <text x="740" y="92" class="table-label">b × 8</text>
+                <!-- Table rows -->
+                <rect x="705" y="100" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="705" y="112" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="705" y="124" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="705" y="136" width="70" height="8" class="row-highlight" />
+                <rect x="705" y="148" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <text x="790" y="142" class="table-label" font-size="7">← row 7</text>
+
+                <!-- Brand Output -->
+                <rect x="810" y="100" width="70" height="40" class="embedding-box" />
+                <text x="845" y="118" class="label">e_brand</text>
+                <text x="845" y="132" class="dim-label">dim: 8</text>
+
+                <!-- Arrows -->
+                <path d="M 670 92 L 695 92" class="arrow-lookup" />
+                <path d="M 780 120 L 805 120" class="arrow-forward" />
+
+                <!-- Pack and SKU (condensed row) -->
+                <text x="160" y="185" class="section-label">Pack</text>
+
+                <!-- Pack ID Input -->
+                <rect x="30" y="195" width="60" height="35" class="id-box" />
+                <text x="60" y="210" class="label">ID: 2</text>
+                <text x="60" y="223" class="dim-label">input</text>
+
+                <!-- Pack Embedding Table -->
+                <rect x="120" y="195" width="80" height="70" class="table-box" />
+                <text x="160" y="212" class="table-label">p × 8</text>
+                <rect x="125" y="220" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="125" y="232" width="70" height="8" class="row-highlight" />
+                <rect x="125" y="244" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <text x="210" y="238" class="table-label" font-size="7">← row 2</text>
+
+                <!-- Pack Output -->
+                <rect x="230" y="210" width="70" height="40" class="embedding-box" />
+                <text x="265" y="228" class="label">e_pack</text>
+                <text x="265" y="242" class="dim-label">dim: 8</text>
+
+                <!-- Arrows -->
+                <path d="M 90 212 L 115 212" class="arrow-lookup" />
+                <path d="M 200 230 L 225 230" class="arrow-forward" />
+
+                <!-- SKU -->
+                <text x="450" y="185" class="section-label">SKU</text>
+
+                <!-- SKU ID Input -->
+                <rect x="320" y="195" width="60" height="35" class="id-box" />
+                <text x="350" y="210" class="label">ID: 42</text>
+                <text x="350" y="223" class="dim-label">input</text>
+
+                <!-- SKU Embedding Table -->
+                <rect x="410" y="195" width="80" height="70" class="table-box" />
+                <text x="450" y="212" class="table-label">s × 8</text>
+                <rect x="415" y="220" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="415" y="232" width="70" height="8" fill="#e3f2fd" stroke="#90caf9" rx="1" />
+                <rect x="415" y="244" width="70" height="8" class="row-highlight" />
+                <text x="500" y="250" class="table-label" font-size="7">← row 42</text>
+
+                <!-- SKU Output -->
+                <rect x="520" y="210" width="70" height="40" class="embedding-box" />
+                <text x="555" y="228" class="label">e_sku</text>
+                <text x="555" y="242" class="dim-label">dim: 8</text>
+
+                <!-- Arrows -->
+                <path d="M 380 212 L 405 212" class="arrow-lookup" />
+                <path d="M 490 230 L 515 230" class="arrow-forward" />
+
+                <!-- Lookup explanation -->
+                <rect x="650" y="185" width="400" height="80" fill="#fffde7" stroke="#fbc02d" stroke-width="1" rx="8" />
+                <text x="850" y="205" class="label">Embedding Lookup Operation</text>
+                <text x="790" y="225" class="dim-label" text-anchor="start" font-size="9">• Each ID indexes into its
+                    embedding table</text>
+                <text x="790" y="240" class="dim-label" text-anchor="start" font-size="9">• Retrieves the corresponding
+                    row (8 values)</text>
+                <text x="790" y="255" class="dim-label" text-anchor="start" font-size="9">• Only this row is updated
+                    during backprop</text>
+
+                <!-- Phase 2: Forward Pass -->
+                <text x="550" y="295" class="phase-label">FORWARD PASS</text>
+                <line x1="50" y1="305" x2="1050" y2="305" stroke="#ddd" stroke-width="1" />
+
+                <!-- Concatenate Embeddings -->
+                <rect x="100" y="320" width="120" height="70" class="concat-box" />
+                <text x="160" y="345" class="label">Concat</text>
+                <text x="160" y="360" class="label">Embeddings</text>
+                <text x="160" y="378" class="dim-label">5 × 8 = 40</text>
+
+                <!-- Arrows from embeddings to concat -->
+                <path d="M 265 140 Q 265 280 180 315" class="arrow-forward" />
+                <path d="M 555 140 Q 400 280 190 315" class="arrow-forward" />
+                <path d="M 845 140 Q 600 280 200 315" class="arrow-forward" />
+                <path d="M 265 250 Q 265 290 170 315" class="arrow-forward" />
+                <path d="M 555 250 Q 400 290 180 315" class="arrow-forward" />
+
+                <!-- Features -->
+                <rect x="100" y="410" width="120" height="50" class="feature-box" />
+                <text x="160" y="435" class="label">Features (x)</text>
+                <text x="160" y="450" class="dim-label">dim: 10</text>
+
+                <!-- Final Concat -->
+                <rect x="300" y="345" width="120" height="70" class="concat-box" />
+                <text x="360" y="370" class="label">Concat All</text>
+                <text x="360" y="388" class="dim-label">40 + 10 = 50</text>
+
+                <!-- Arrows to final concat -->
+                <path d="M 220 355 L 295 370" class="arrow-forward" />
+                <path d="M 220 435 L 295 390" class="arrow-forward" />
+
+                <!-- Linear Layer -->
+                <rect x="500" y="345" width="120" height="70" class="linear-box" />
+                <text x="560" y="368" class="label">Linear Layer</text>
+                <text x="560" y="385" class="dim-label">W: 50 × 1</text>
+                <text x="560" y="400" class="dim-label">b: 1</text>
+
+                <!-- Arrow -->
+                <path d="M 420 380 L 495 380" class="arrow-forward" />
+
+                <!-- Prediction -->
+                <rect x="700" y="355" width="60" height="50" class="output-box" />
+                <text x="730" y="380" class="label-large">ŷ</text>
+                <text x="730" y="395" class="dim-label">pred</text>
+
+                <!-- Arrow -->
+                <path d="M 620 380 L 695 380" class="arrow-forward" />
+
+                <!-- Target -->
+                <rect x="700" y="430" width="60" height="50" class="target-box" />
+                <text x="730" y="455" class="label-large">y</text>
+                <text x="730" y="470" class="dim-label">target</text>
+
+                <!-- Loss -->
+                <rect x="840" y="380" width="120" height="60" class="loss-box" />
+                <text x="900" y="405" class="label">MSE Loss</text>
+                <text x="900" y="425" class="formula">L = (ŷ - y)²</text>
+
+                <!-- Arrows to loss -->
+                <path d="M 760 380 L 835 400" class="arrow-forward" />
+                <path d="M 760 455 L 835 420" class="arrow-forward" />
+
+                <!-- Phase 3: Backward Pass -->
+                <text x="550" y="510" class="phase-label">BACKWARD PASS (Gradient Flow)</text>
+                <line x1="50" y1="520" x2="1050" y2="520" stroke="#ddd" stroke-width="1" />
+
+                <!-- Loss Gradient -->
+                <rect x="840" y="540" width="120" height="50" class="gradient-box" />
+                <text x="900" y="560" class="label">∂L/∂ŷ</text>
+                <text x="900" y="578" class="formula">= 2(ŷ - y)</text>
+
+                <!-- Linear Gradients -->
+                <rect x="620" y="540" width="160" height="70" class="gradient-box" />
+                <text x="700" y="560" class="label">Linear Gradients</text>
+                <text x="700" y="578" class="formula">∂L/∂W, ∂L/∂b</text>
+                <text x="700" y="595" class="dim-label">∂L/∂z (dim: 50)</text>
+
+                <!-- Arrow -->
+                <path d="M 835 565 L 785 565" class="arrow-backward" />
+
+                <!-- Split Gradients -->
+                <rect x="400" y="540" width="160" height="70" class="gradient-box" />
+                <text x="480" y="560" class="label">Gradient Split</text>
+                <text x="480" y="578" class="dim-label">∂L/∂h (dim: 40)</text>
+                <text x="480" y="595" class="dim-label">∂L/∂x (dim: 10)</text>
+
+                <!-- Arrow -->
+                <path d="M 615 575 L 565 575" class="arrow-backward" />
+
+                <!-- Embedding Gradients -->
+                <rect x="150" y="540" width="180" height="85" class="gradient-box" />
+                <text x="240" y="560" class="label">Embedding Gradients</text>
+                <text x="240" y="578" class="dim-label">∂L/∂e_region (dim: 8)</text>
+                <text x="240" y="593" class="dim-label">∂L/∂e_channel (dim: 8)</text>
+                <text x="240" y="608" class="dim-label">∂L/∂e_brand, pack, sku</text>
+
+                <!-- Arrow -->
+                <path d="M 395 575 L 335 575" class="arrow-backward" />
+
+                <!-- Phase 4: Parameter Updates -->
+                <text x="550" y="660" class="phase-label">PARAMETER UPDATES</text>
+                <line x1="50" y1="670" x2="1050" y2="670" stroke="#ddd" stroke-width="1" />
+
+                <!-- Embedding Updates -->
+                <rect x="50" y="690" width="280" height="140" class="update-box" />
+                <text x="190" y="712" class="label">Embedding Table Updates</text>
+                <text x="190" y="735" class="formula">E_region[3] -= η · ∂L/∂e_region</text>
+                <text x="190" y="755" class="formula">E_channel[1] -= η · ∂L/∂e_channel</text>
+                <text x="190" y="775" class="formula">E_brand[7] -= η · ∂L/∂e_brand</text>
+                <text x="190" y="795" class="formula">E_pack[2] -= η · ∂L/∂e_pack</text>
+                <text x="190" y="815" class="formula">E_sku[42] -= η · ∂L/∂e_sku</text>
+
+                <!-- Arrow -->
+                <path d="M 240 625 L 200 685" class="arrow-update" />
+
+                <!-- Linear Updates -->
+                <rect x="380" y="690" width="200" height="110" class="update-box" />
+                <text x="480" y="720" class="label">Linear Layer Updates</text>
+                <text x="480" y="755" class="formula">W -= η · ∂L/∂W</text>
+                <text x="480" y="785" class="formula">b -= η · ∂L/∂b</text>
+
+                <!-- Arrow -->
+                <path d="M 700 610 L 520 685" class="arrow-update" />
+
+                <!-- Key insight -->
+                <rect x="630" y="690" width="420" height="140" fill="#e3f2fd" stroke="#1976d2" stroke-width="1"
+                    rx="8" />
+                <text x="840" y="715" class="label" font-size="12">Key Training Insights</text>
+                <text x="780" y="740" class="dim-label" text-anchor="start" font-size="9">• Only specific rows are
+                    updated (e.g., row 3 for region)</text>
+                <text x="780" y="760" class="dim-label" text-anchor="start" font-size="9">• Other rows in embedding
+                    tables remain unchanged</text>
+                <text x="780" y="780" class="dim-label" text-anchor="start" font-size="9">• Enables shared learning:
+                    same brand across SKUs</text>
+                <text x="780" y="800" class="dim-label" text-anchor="start" font-size="9">• η = learning rate
+                    (hyperparameter)</text>
+                <text x="780" y="820" class="dim-label" text-anchor="start" font-size="9">• Features (x) are inputs, not
+                    updated</text>
+
+                <!-- Legend -->
+                <rect x="50" y="860" width="1000" height="100" fill="#f5f5f5" stroke="#ddd" stroke-width="1" rx="8" />
+                <text x="550" y="885" class="label" font-size="12">Legend</text>
+
+                <!-- Arrow legends -->
+                <line x1="80" y1="910" x2="120" y2="910" class="arrow-lookup" />
+                <text x="170" y="914" class="dim-label" text-anchor="start">ID lookup</text>
+
+                <line x1="80" y1="935" x2="120" y2="935" class="arrow-forward" />
+                <text x="170" y="939" class="dim-label" text-anchor="start">Forward pass</text>
+
+                <line x1="260" y1="910" x2="300" y2="910" class="arrow-backward" />
+                <text x="350" y="914" class="dim-label" text-anchor="start">Backward pass</text>
+
+                <line x1="260" y1="935" x2="300" y2="935" class="arrow-update" />
+                <text x="350" y="939" class="dim-label" text-anchor="start">Parameter update</text>
+
+                <!-- Box legends -->
+                <rect x="470" y="902" width="20" height="12" class="row-highlight" />
+                <text x="520" y="912" class="dim-label" text-anchor="start">Selected row</text>
+
+                <rect x="470" y="927" width="20" height="12" class="gradient-box" />
+                <text x="520" y="937" class="dim-label" text-anchor="start">Gradient</text>
+
+                <rect x="620" y="902" width="20" height="12" class="update-box" />
+                <text x="670" y="912" class="dim-label" text-anchor="start">Update</text>
+
+                <rect x="620" y="927" width="20" height="12" class="loss-box" />
+                <text x="670" y="937" class="dim-label" text-anchor="start">Loss</text>
+
+                <!-- Notation -->
+                <text x="780" y="912" class="dim-label" text-anchor="start">E[id] = embedding row</text>
+                <text x="780" y="937" class="dim-label" text-anchor="start">∂L/∂x = gradient of L w.r.t. x</text>
+            </svg>
+        </div>
+    </div>
+</body>
+
+</html>

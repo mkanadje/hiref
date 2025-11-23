@@ -79,3 +79,25 @@ DEVICE = "mps"  # 'cuda' or 'cpu' - will auto-fallback to cpu if cuda unavailabl
 # RANDOM SEED
 # =============================================================================
 RANDOM_SEED = 42
+
+# =============================================================================
+# WIGHTS CONSTRAINTS (Business Logic)
+# =============================================================================
+USE_CONSTRAINT_WEIGHTS = True
+
+POSITIVE_WEIGHT_FEATURES = [
+    "temperature",
+    "gdp_index",
+    "consumer_confidence",
+    "distribution",
+    "tv_spend",
+    "digital_spend",
+    "trade_spend",
+    "discount_pct",
+]
+
+NEGATIVE_WEIGHT_FEATURES = [
+    "precipitation",
+    "unemployment_rate",
+    "price",
+]

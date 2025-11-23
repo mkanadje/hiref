@@ -29,11 +29,14 @@ class Predictor:
         print(f"Vocab size: {vocab_sizes}")
         print(f"Embedding dims: {embedding_dims}")
         print(f"N features: {n_features}")
-        # Create model with same architecture
+        # Create model with same architecture (including constraints if they were used during training)
+        # Handle backward compatibility: old preprocessors don't have constraint_indices
+        constraint_indices = getattr(self.preprocessor, 'constraint_indices', None)
         self.model = HierarchicalModel(
             vocab_sizes=vocab_sizes,
             embedding_dims=embedding_dims,
             n_features=n_features,
+            constraint_indices=constraint_indices,
         )
         # Load trained weights
         print(f"Loading weights from {model_path}")

@@ -217,14 +217,16 @@ def test_transform_encoded_ids_valid(preprocessor, sample_df):
 
 
 def test_transform_features_scaled(preprocessor, sample_df):
-    """Test that features are standardized (approximately zero mean, unit variance)"""
+    """Test that features are scaled to [0, 1] range using MinMaxScaler"""
     df = preprocessor.create_key_column(sample_df.copy())
     preprocessor.fit(df)
     _, features, _, _ = preprocessor.transform(df)
 
-    # Check approximate standardization
-    assert np.abs(features.mean()) < 0.1
-    assert np.abs(features.std() - 1.0) < 0.1
+    # Check MinMaxScaler properties: features should be in [0, 1] range
+    assert features.min() >= 0.0
+    assert features.max() <= 1.0
+    # For uniform random data, mean should be approximately 0.5
+    assert np.abs(features.mean() - 0.5) < 0.2  # Allow some variance
 
 
 # =============================================================================
@@ -339,7 +341,7 @@ def test_save_and_load(preprocessor, sample_df, tmp_path):
     assert os.path.exists(save_path)
 
 
-def test_load_restores_state(preprocessor, sample_df, tmp_path, sample_config):
+def test_load_restores_state(preprocessor, sample_df, tmp_path):
     """Test that loaded preprocessor can transform data correctly"""
     df = preprocessor.create_key_column(sample_df.copy())
     preprocessor.fit(df)
@@ -351,8 +353,8 @@ def test_load_restores_state(preprocessor, sample_df, tmp_path, sample_config):
     save_path = tmp_path / "preprocessor.pkl"
     preprocessor.save(save_path)
 
-    new_preprocessor = DataPreprocessor(**sample_config)
-    new_preprocessor.load(save_path)
+    # Load as class method (returns new instance)
+    new_preprocessor = DataPreprocessor.load(save_path)
 
     # Transform with loaded
     df2 = new_preprocessor.create_key_column(sample_df.copy())
@@ -365,16 +367,19 @@ def test_load_restores_state(preprocessor, sample_df, tmp_path, sample_config):
     np.testing.assert_array_almost_equal(t1, t2)
 
 
-def test_load_returns_self(preprocessor, sample_df, tmp_path):
-    """Test that load returns self for method chaining"""
+def test_load_returns_instance(preprocessor, sample_df, tmp_path):
+    """Test that load returns a valid preprocessor instance"""
     df = preprocessor.create_key_column(sample_df.copy())
     preprocessor.fit(df)
 
     save_path = tmp_path / "preprocessor.pkl"
     preprocessor.save(save_path)
 
-    result = preprocessor.load(save_path)
-    assert result is preprocessor
+    # Load as class method returns new instance
+    result = DataPreprocessor.load(save_path)
+    assert isinstance(result, DataPreprocessor)
+    assert result is not preprocessor  # Different instance
+    assert result.vocab_sizes == preprocessor.vocab_sizes  # But same state
 
 
 # =============================================================================
