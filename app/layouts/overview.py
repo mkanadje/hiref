@@ -265,7 +265,7 @@ def create_layout():
                 ],
                 className="mb-4",
             ),
-            # Timeline view with separate filters
+            # Error Analysis Table with filters
             dbc.Row(
                 [
                     dbc.Col(
@@ -275,19 +275,19 @@ def create_layout():
                                     dbc.CardBody(
                                         [
                                             html.H5(
-                                                "Timeline: Actual vs Predicted Sales",
+                                                "Error Analysis by Dataset Split",
                                                 className="card-title",
                                             ),
-                                            # Separate filters for timeline
+                                            # Hierarchical filters
                                             dbc.Row(
                                                 [
                                                     dbc.Col(
                                                         [
                                                             dbc.Label("Region:"),
                                                             dcc.Dropdown(
-                                                                id="timeline-filter-region",
+                                                                id="error-table-filter-region",
                                                                 placeholder="All Regions",
-                                                                multi=True,
+                                                                multi=False,
                                                                 className="mb-2",
                                                             ),
                                                         ],
@@ -297,9 +297,9 @@ def create_layout():
                                                         [
                                                             dbc.Label("State:"),
                                                             dcc.Dropdown(
-                                                                id="timeline-filter-state",
+                                                                id="error-table-filter-state",
                                                                 placeholder="All States",
-                                                                multi=True,
+                                                                multi=False,
                                                                 className="mb-2",
                                                             ),
                                                         ],
@@ -309,9 +309,9 @@ def create_layout():
                                                         [
                                                             dbc.Label("Segment:"),
                                                             dcc.Dropdown(
-                                                                id="timeline-filter-segment",
+                                                                id="error-table-filter-segment",
                                                                 placeholder="All Segments",
-                                                                multi=True,
+                                                                multi=False,
                                                                 className="mb-2",
                                                             ),
                                                         ],
@@ -321,9 +321,9 @@ def create_layout():
                                                         [
                                                             dbc.Label("Brand:"),
                                                             dcc.Dropdown(
-                                                                id="timeline-filter-brand",
+                                                                id="error-table-filter-brand",
                                                                 placeholder="All Brands",
-                                                                multi=True,
+                                                                multi=False,
                                                                 className="mb-2",
                                                             ),
                                                         ],
@@ -333,9 +333,9 @@ def create_layout():
                                                         [
                                                             dbc.Label("Pack Size:"),
                                                             dcc.Dropdown(
-                                                                id="timeline-filter-pack",
+                                                                id="error-table-filter-pack",
                                                                 placeholder="All Packs",
-                                                                multi=True,
+                                                                multi=False,
                                                                 className="mb-2",
                                                             ),
                                                         ],
@@ -343,26 +343,13 @@ def create_layout():
                                                     ),
                                                     dbc.Col(
                                                         [
-                                                            dbc.Label("Dataset:"),
-                                                            dcc.Dropdown(
-                                                                id="timeline-filter-dataset",
-                                                                options=[
-                                                                    {
-                                                                        "label": "Train",
-                                                                        "value": "train",
-                                                                    },
-                                                                    {
-                                                                        "label": "Val",
-                                                                        "value": "val",
-                                                                    },
-                                                                    {
-                                                                        "label": "Test",
-                                                                        "value": "test",
-                                                                    },
-                                                                ],
-                                                                placeholder="All Datasets",
-                                                                multi=True,
-                                                                className="mb-2",
+                                                            html.Br(),
+                                                            dbc.Button(
+                                                                "Reset Filters",
+                                                                id="error-table-reset-button",
+                                                                color="secondary",
+                                                                size="sm",
+                                                                className="mt-2",
                                                             ),
                                                         ],
                                                         width=2,
@@ -370,7 +357,8 @@ def create_layout():
                                                 ],
                                                 className="mb-3",
                                             ),
-                                            dcc.Graph(id="timeline-chart"),
+                                            # Error metrics table
+                                            html.Div(id="error-analysis-table"),
                                         ]
                                     )
                                 ],

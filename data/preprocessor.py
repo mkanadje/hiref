@@ -16,10 +16,8 @@ class DataPreprocessor:
 
         # Each hierarchy to be encoded
         self.label_encoders = {}
-        self.feature_scaler = (
-            None  # TODO: Make dictionary so each feature can have a separate scaler
-        )
-        self.target_scaler = None
+        self.feature_scaler = config.FEATURE_SCALER
+        self.target_scaler = config.TARGET_SCALER
         self.vocab_sizes = {}
         self.constraint_indices = None
 
@@ -44,11 +42,12 @@ class DataPreprocessor:
 
         # Fit StandardScaler for features
         # self.feature_scaler = StandardScaler()
-        self.feature_scaler = MinMaxScaler()
+        # self.feature_scaler = MinMaxScaler()
         self.feature_scaler.fit(df[self.feature_cols])
 
         # Fit StandarScaler to target
-        self.target_scaler = StandardScaler()
+        # self.target_scaler = StandardScaler()
+        # self.target_scaler = MinMaxScaler()
         self.target_scaler.fit(df[[self.target_col]])
 
         # Compute constraint indices if constraints are enabled
@@ -85,7 +84,10 @@ class DataPreprocessor:
             c: self.label_encoders[c].transform(df[c]) for c in self.hierarchy_cols
         }
         features = self.feature_scaler.transform(df[self.feature_cols])
-        targets = self.target_scaler.transform(df[[self.target_col]]).flatten()
+        targets = self.target_scaler.transform(df[[self.target_col]])
+        if isinstance(targets, pd.DataFrame):
+            targets = targets.values
+        targets = targets.flatten()
         keys = df[self.key_col].values
         return hierarchy_ids, features, targets, keys
 
@@ -154,7 +156,9 @@ class DataPreprocessor:
         instance.constraint_indices = state.get("constraint_indices", None)
         # Load column configurations (with backward compatibility)
         instance.feature_cols = state.get("feature_cols", None)
-        instance.hierarchy_cols = state.get("hierarchy_cols", list(state["label_encoders"].keys()))
+        instance.hierarchy_cols = state.get(
+            "hierarchy_cols", list(state["label_encoders"].keys())
+        )
         instance.target_col = state.get("target_col", None)
         instance.key_col = state.get("key_col", None)
         instance.date_col = state.get("date_col", None)

@@ -6,6 +6,9 @@
 
 *   **Hierarchical Embeddings**: Learns shared representations for categorical hierarchies to capture cross-SKU patterns.
 *   **Hybrid Architecture**: Combines embeddings with numerical features (price, weather, macroeconomics) in a linear model.
+*   **Constrained Optimization**: Enforces business logic (e.g., Price must have negative impact) using monotonic constraints on weights.
+*   **Smart Initialization**: Initializes bias to target mean to ensure realistic baseline contributions from the start.
+*   **Multiplicative Interactions**: Captures complex relationships between hierarchy levels and drivers (e.g., "TV Spend effectiveness varies by Region").
 *   **Vectorized Inference**: Fast batch prediction for large datasets.
 *   **Interactive Dashboard**: A Dash-based web application to visualize performance, driver importance, and diagnostics.
 

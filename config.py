@@ -1,3 +1,5 @@
+from sklearn.preprocessing import MinMaxScaler, FunctionTransformer
+
 # =============================================================================
 # DATA PATHS
 # =============================================================================
@@ -30,7 +32,7 @@ FEATURE_COLS = [
     # Macroeconomic features
     "gdp_index",
     "unemployment_rate",
-    "consumer_confidence",
+    # "consumer_confidence",
     # SKU-level features
     "price",
     "distribution",
@@ -88,7 +90,7 @@ USE_CONSTRAINT_WEIGHTS = True
 POSITIVE_WEIGHT_FEATURES = [
     "temperature",
     "gdp_index",
-    "consumer_confidence",
+    # "consumer_confidence",
     "distribution",
     "tv_spend",
     "digital_spend",
@@ -101,3 +103,15 @@ NEGATIVE_WEIGHT_FEATURES = [
     "unemployment_rate",
     "price",
 ]
+
+USE_MULTIPLICATIVE_INTERACTIONS = True
+PROJECTION_DIM = len(
+    FEATURE_COLS
+)  # This one decides projection dimensions for the contacatenated emebddings
+PROJECTION_INIT_GAIN = 0.01
+
+FEATURE_SCALER = MinMaxScaler()
+TARGET_SCALER = FunctionTransformer(validate=False)
+# TARGET_SCALER = MinMaxScaler()
+
+BASELINE_INITIALIZATION = 0.6

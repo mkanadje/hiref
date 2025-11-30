@@ -1,5 +1,6 @@
 from data.preprocessor import DataPreprocessor
 from models.hierarchical_model import HierarchicalModel
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, FunctionTransformer
 import config
 import torch
 from tqdm import tqdm
@@ -25,18 +26,24 @@ class Predictor:
         vocab_sizes = self.preprocessor.get_vocab_sizes()
         embedding_dims = config.EMBEDDING_DIMS
         n_features = len(config.FEATURE_COLS)
+        projection_dim = config.PROJECTION_DIM
+        proj_init_gain = config.PROJECTION_INIT_GAIN
+        user_interactions = config.USE_MULTIPLICATIVE_INTERACTIONS
         print(f"Creating model architecture...")
         print(f"Vocab size: {vocab_sizes}")
         print(f"Embedding dims: {embedding_dims}")
         print(f"N features: {n_features}")
         # Create model with same architecture (including constraints if they were used during training)
         # Handle backward compatibility: old preprocessors don't have constraint_indices
-        constraint_indices = getattr(self.preprocessor, 'constraint_indices', None)
+        constraint_indices = getattr(self.preprocessor, "constraint_indices", None)
         self.model = HierarchicalModel(
             vocab_sizes=vocab_sizes,
             embedding_dims=embedding_dims,
             n_features=n_features,
             constraint_indices=constraint_indices,
+            projection_dim=projection_dim,
+            proj_init_gain=proj_init_gain,
+            use_interactions=user_interactions,
         )
         # Load trained weights
         print(f"Loading weights from {model_path}")
@@ -131,28 +138,39 @@ class Predictor:
 
         # Extract individual driver contribution scaled
         feature_breakdown = contributions["feature_breakdown"]
+        # Extract individual interaction breakdown
+        interaction_breakdown = contributions["interaction_breakdown"]
+
         driver_contribution_scaled = {}
         for i, feature_name in enumerate(self.feature_cols):
             contrib_value = feature_breakdown[f"feature_{i}"].cpu().item()
-            driver_contribution_scaled[feature_name] = contrib_value
+            interaction_value = interaction_breakdown[f"interaction_{i}"].cpu().item()
+            driver_contribution_scaled[feature_name] = contrib_value + interaction_value
         total_driver_impact_scaled = sum(driver_contribution_scaled.values())
 
         # Step 6: Convert driver contribution to original scale
-        # feature_stds = (
-        #     self.preprocessor.feature_scaler.scale_
-        # )  # (n_features, ) Standatd Dev of features
-        target_std = self.preprocessor.target_scaler.scale_[0]
         driver_contribution_original = {}
         for i, feature_name in enumerate(self.feature_cols):
             contrib_scaled = driver_contribution_scaled[feature_name]
-            # contrib_original = contrib_scaled * feature_stds[i]
-            contrib_original = contrib_scaled * target_std
+            # contrib_original = contrib_scaled * (target_max - target_min)
+            contrib_original = self.get_unscaled_contrib(contrib_scaled)
             driver_contribution_original[feature_name] = float(contrib_original)
+
+        driver_contribution_original = self.get_unscaled_contribution(
+            driver_contribution_scaled
+        )
         total_driver_impact_original = sum(driver_contribution_original.values())
 
         # Calculate baseline as a residual of total driver impact to maintain additivity
-        baseline_original = prediction_original - total_driver_impact_original
+        # baseline_original = prediction_original - total_driver_impact_original
+        # target_mean = self.preprocessor.target_scaler.mean_[0]
+        # baseline_original = (bias + embedding_contribution_scaled) * (
+        #     target_max - target_min
+        # ) + target_min
 
+        baseline_original = self.get_unscaled_contribution(
+            bias + embedding_contribution_scaled, org_scale=True
+        )
         sku_key = "_".join([str(sku_dict[col]) for col in self.hierarchy_cols])
 
         # Step 7: Build result
@@ -177,6 +195,25 @@ class Predictor:
             "sku_key": sku_key,
         }
         return result
+
+    def get_unscaled_contribution(self, contrib_scaled, org_scale=False):
+        if isinstance(self.preprocessor.target_scaler, MinMaxScaler):
+            target_min = self.preprocessor.target_scaler.data_min_[0]
+            target_max = self.preprocessor.target_scaler.data_max_[0]
+            contrib_original = contrib_scaled * (target_max - target_min)
+            if org_scale:
+                contrib_original = contrib_original + target_min
+            # contrib_original = float(contrib_original)
+            return contrib_original
+        elif isinstance(self.preprocessor.target_scaler, StandardScaler):
+            pass
+        elif isinstance(self.preprocessor.target_scaler, FunctionTransformer):
+            return contrib_scaled
+        else:
+            raise ValueError(
+                f"Error: {self.preprocessor.target_scaler} is not supported for target transform"
+            )
+        return None
 
     def predict_batch(self, sku_data, return_dataframe=False, show_progress=False):
         """
@@ -261,26 +298,28 @@ class Predictor:
             contributions["embedding_contribution"].cpu().numpy()
         )
         feature_breakdown_scaled = contributions["feature_breakdown"]
-        # feature_stds = self.preprocessor.feature_scaler.scale_
-        target_std = self.preprocessor.target_scaler.scale_[0]
+        interaction_breakdown_scaled = contributions["interaction_breakdown"]
 
         # Step 8: VECTORIZED unpacking
         # Convert all driver contributions to DataFrame at once
         driver_contrib_df_scaled = pd.DataFrame(
             {
-                f"driver_{feat}_scaled": feature_breakdown_scaled[f"feature_{i}"]
-                .cpu()
-                .numpy()
+                f"driver_{feat}_scaled": (
+                    feature_breakdown_scaled[f"feature_{i}"].cpu().numpy()
+                    + interaction_breakdown_scaled[f"interaction_{i}"].cpu().numpy()
+                )
                 for i, feat in enumerate(self.feature_cols)
             }
         )
+
         driver_contrib_df_original = pd.DataFrame(
             {
-                f"driver_{feat}_original": feature_breakdown_scaled[f"feature_{i}"]
-                .cpu()
-                .numpy()
-                # * feature_stds[i]
-                * target_std
+                f"driver_{feat}_original": (
+                    self.get_unscaled_contribution(
+                        feature_breakdown_scaled[f"feature_{i}"].cpu().numpy()
+                        + interaction_breakdown_scaled[f"interaction_{i}"].cpu().numpy()
+                    )
+                )
                 for i, feat in enumerate(self.feature_cols)
             }
         )
@@ -292,13 +331,18 @@ class Predictor:
         for col in self.hierarchy_cols[1:]:
             sku_key = sku_key + "_" + sku_df[col].astype(str)
         # Build result DataFRame directly
+
+        baseline_scaled = bias + embedding_contributions_scaled
+        baseline_original = self.get_unscaled_contribution(
+            baseline_scaled, org_scale=True
+        )
         results_df = pd.DataFrame(
             {
                 "date": sku_df["date"].values,
                 "sku_key": sku_key.values,
                 "prediction": predictions_original,
-                "baseline_scaled": bias + embedding_contributions_scaled,
-                "baseline_original": predictions_original - total_driver_original,
+                "baseline_scaled": baseline_scaled,
+                "baseline_original": baseline_original,
                 "bias": bias,
                 "embedding_contribution_scaled": embedding_contributions_scaled,
                 "total_driver_contribution_scaled": total_driver_scaled,

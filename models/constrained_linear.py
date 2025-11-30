@@ -18,7 +18,14 @@ class ConstrainedLinear(nn.Module):
     - Unconstrained: w = theta (no transformation)
     """
 
-    def __init__(self, in_features, out_features, constraint_indices=None, bias=True):
+    def __init__(
+        self,
+        in_features,
+        out_features,
+        constraint_indices=None,
+        bias=True,
+        initial_bias=0.0,
+    ):
         """
         Args:
             in_features: int - Number of input features
@@ -40,6 +47,8 @@ class ConstrainedLinear(nn.Module):
         self.theta = nn.Parameter(torch.randn(out_features, in_features) * 0.01)
         if bias:
             self.bias = nn.Parameter(torch.zeros(out_features))
+            with torch.no_grad():
+                self.bias.fill_(initial_bias)
         else:
             self.register_parameter("bias", None)
 

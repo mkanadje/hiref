@@ -355,7 +355,7 @@ def plot_stacked_decomposition(df):
         if col.startswith("driver_") and col.endswith("_original")
     ]
 
-    agg_cols = ["baseline_original", "prediction"] + driver_cols
+    agg_cols = ["baseline_original", "prediction", "actual_sales"] + driver_cols
 
     agg_df = (
         df.groupby(["date", "dataset_split"])[agg_cols]
@@ -392,15 +392,16 @@ def plot_stacked_decomposition(df):
             )
         )
 
-    # 2. Line Chart for Total Prediction (colored by split)
+    # 2. Line Charts for Total Prediction and Actual Sales
     split_colors = {"train": "#2ca02c", "val": "#ff7f0e", "test": "#d62728"}
 
+    # Add prediction lines (colored by split)
     for split in ["train", "val", "test"]:
         split_data = agg_df[agg_df["dataset_split"] == split]
         if len(split_data) > 0:
             fig.add_trace(
                 go.Scatter(
-                    name=f"Total Predicted ({split.title()})",
+                    name=f"Predicted ({split.title()})",
                     x=split_data["date"],
                     y=split_data["prediction"],
                     mode="lines",
@@ -408,8 +409,19 @@ def plot_stacked_decomposition(df):
                 )
             )
 
+    # Add single continuous actual sales line (black, dashed, thick)
+    fig.add_trace(
+        go.Scatter(
+            name="Actual Sales",
+            x=agg_df["date"],
+            y=agg_df["actual_sales"],
+            mode="lines",
+            line=dict(color="#000000", width=3, dash="dash"),
+        )
+    )
+
     fig.update_layout(
-        title="Stacked Decomposition: Baseline + Drivers vs Total Prediction",
+        title="Stacked Decomposition: Baseline + Drivers vs Predicted & Actual Sales",
         xaxis_title="Date",
         yaxis_title="Sales Contribution",
         barmode="relative",  # Allows negative values to stack correctly below 0

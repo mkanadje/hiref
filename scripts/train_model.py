@@ -32,6 +32,9 @@ def main():
     train_data, val_data, test_data = preprocessor.prepare_data(
         config.DATA_PATH, config.TRAIN_END_DATE, config.VAL_END_DATE
     )
+    train_targets = train_data[2]  # hieraarchy_ids, features, targets, keys
+    target_mean = train_targets.mean().item() * config.BASELINE_INITIALIZATION
+    print(f"Target Mean: {target_mean:.4f} (will be used for initializing the bias)")
     print("Data Shapes")
     for name, data in [("Train", train_data), ("Val", val_data), ("Test", test_data)]:
         hierarchy_ids, features, target, keys = data
@@ -74,6 +77,10 @@ def main():
         embedding_dims=config.EMBEDDING_DIMS,
         n_features=len(config.FEATURE_COLS),
         constraint_indices=preprocessor.constraint_indices,
+        use_interactions=config.USE_MULTIPLICATIVE_INTERACTIONS,
+        projection_dim=config.PROJECTION_DIM,
+        proj_init_gain=config.PROJECTION_INIT_GAIN,
+        initial_bias=target_mean,
     )
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total Parameters: {total_params:,}")
@@ -89,9 +96,45 @@ def main():
         device = torch.device("cpu")
         print(f"Warning: {config.DEVICE} is not available, using CPU")
     print(f"Using device: {device}")
+
+    # Exclude weight decay parameter for bias
+    bias_params = []
+    other_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if "bias" in name:
+            bias_params.append(param)
+        else:
+            other_params.append(param)
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=config.LEARNING_RATE, weight_decay=config.WEIGHT_DECAY
+        [
+            {"params": other_params, "weight_decay": config.WEIGHT_DECAY},
+            {"params": bias_params, "weight_decay": 0.0},
+        ],
+        lr=config.LEARNING_RATE,
     )
+    print("=" * 60)
+    print("Optimizer Parameter Verification")
+    # Trainable model paramters
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # Count parameters in optimizaer
+    optimizer_params = sum(
+        p.numel() for group in optimizer.param_groups for p in group["params"]
+    )
+    print(f"Model trainable paraterms: {trainable_params:,}")
+    print(f"Optimizer parameters: {optimizer_params:,}")
+    print(f"Match={trainable_params==optimizer_params}")
+    if config.USE_MULTIPLICATIVE_INTERACTIONS:
+        proj_params = sum(p.numel() for p in model.emb_projection.parameters())
+        print(f"Projectio layer paramters: {proj_params:,}")
+        print(
+            f"    - Weight: {model.emb_projection.weight.numel():,} (shape: {tuple(model.emb_projection.weight.shape)})"
+        )
+        print(
+            f"    - Bias: {model.emb_projection.bias.numel():,} (shape: {tuple(model.emb_projection.bias.shape)})"
+        )
+    print("=" * 60)
 
     print("=" * 60)
     print("STEP 6: TRAINING MODEL")

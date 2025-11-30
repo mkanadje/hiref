@@ -219,3 +219,4 @@ __marimo__/
 *.csv
 sample_data/
 outputs/
+notebooks/

@@ -252,203 +252,6 @@ def register_callbacks(app, df):
         return plot_actual_vs_predicted(filtered_df, sample_size=10000)
 
     # =========================================================================
-    # TIMELINE FILTERS (Separate cascading filters for timeline chart)
-    # =========================================================================
-
-    # Timeline: Populate region options
-    @app.callback(
-        Output("timeline-filter-region", "options"),
-        Input("url", "pathname"),
-    )
-    def populate_timeline_region_options(pathname):
-        """Populate timeline region dropdown with all regions."""
-        return [{"label": r, "value": r} for r in sorted(df["region"].unique())]
-
-    # Timeline: Cascading filter for state
-    @app.callback(
-        Output("timeline-filter-state", "options"),
-        Input("timeline-filter-region", "value"),
-    )
-    def populate_timeline_state_options(region_filter):
-        """Populate timeline state dropdown based on selected regions."""
-        if region_filter:
-            filtered_df = df[df["region"].isin(region_filter)]
-            states = sorted(filtered_df["state"].unique())
-        else:
-            states = sorted(df["state"].unique())
-        return [{"label": s, "value": s} for s in states]
-
-    # Timeline: Cascading filter for segment
-    @app.callback(
-        Output("timeline-filter-segment", "options"),
-        [
-            Input("timeline-filter-region", "value"),
-            Input("timeline-filter-state", "value"),
-        ],
-    )
-    def populate_timeline_segment_options(region_filter, state_filter):
-        """Populate timeline segment dropdown based on selected regions/states."""
-        filtered_df = df.copy()
-        if region_filter:
-            filtered_df = filtered_df[filtered_df["region"].isin(region_filter)]
-        if state_filter:
-            filtered_df = filtered_df[filtered_df["state"].isin(state_filter)]
-        segments = sorted(filtered_df["segment"].unique())
-        return [{"label": s, "value": s} for s in segments]
-
-    # Timeline: Cascading filter for brand
-    @app.callback(
-        Output("timeline-filter-brand", "options"),
-        [
-            Input("timeline-filter-region", "value"),
-            Input("timeline-filter-state", "value"),
-            Input("timeline-filter-segment", "value"),
-        ],
-    )
-    def populate_timeline_brand_options(region_filter, state_filter, segment_filter):
-        """Populate timeline brand dropdown based on upstream filters."""
-        filtered_df = df.copy()
-        if region_filter:
-            filtered_df = filtered_df[filtered_df["region"].isin(region_filter)]
-        if state_filter:
-            filtered_df = filtered_df[filtered_df["state"].isin(state_filter)]
-        if segment_filter:
-            filtered_df = filtered_df[filtered_df["segment"].isin(segment_filter)]
-        brands = sorted(filtered_df["brand"].unique())
-        return [{"label": b, "value": b} for b in brands]
-
-    # Timeline: Cascading filter for pack
-    @app.callback(
-        Output("timeline-filter-pack", "options"),
-        [
-            Input("timeline-filter-region", "value"),
-            Input("timeline-filter-state", "value"),
-            Input("timeline-filter-segment", "value"),
-            Input("timeline-filter-brand", "value"),
-        ],
-    )
-    def populate_timeline_pack_options(
-        region_filter, state_filter, segment_filter, brand_filter
-    ):
-        """Populate timeline pack dropdown based on all upstream filters."""
-        filtered_df = df.copy()
-        if region_filter:
-            filtered_df = filtered_df[filtered_df["region"].isin(region_filter)]
-        if state_filter:
-            filtered_df = filtered_df[filtered_df["state"].isin(state_filter)]
-        if segment_filter:
-            filtered_df = filtered_df[filtered_df["segment"].isin(segment_filter)]
-        if brand_filter:
-            filtered_df = filtered_df[filtered_df["brand"].isin(brand_filter)]
-        packs = sorted(filtered_df["pack"].unique())
-        return [{"label": p, "value": p} for p in packs]
-
-    # Timeline chart with separate filters
-    @app.callback(
-        Output("timeline-chart", "figure"),
-        [
-            Input("timeline-filter-region", "value"),
-            Input("timeline-filter-state", "value"),
-            Input("timeline-filter-segment", "value"),
-            Input("timeline-filter-brand", "value"),
-            Input("timeline-filter-pack", "value"),
-            Input("timeline-filter-dataset", "value"),
-        ],
-    )
-    def update_timeline_chart(
-        region_filter,
-        state_filter,
-        segment_filter,
-        brand_filter,
-        pack_filter,
-        dataset_filter,
-    ):
-        """Create timeline chart showing actual vs predicted over time with same filters."""
-        # Start with full dataset
-        filtered_df = df.copy()
-
-        # Apply filters if selected (same logic as scatter plot)
-        if region_filter:
-            filtered_df = filtered_df[filtered_df["region"].isin(region_filter)]
-        if state_filter:
-            filtered_df = filtered_df[filtered_df["state"].isin(state_filter)]
-        if segment_filter:
-            filtered_df = filtered_df[filtered_df["segment"].isin(segment_filter)]
-        if brand_filter:
-            filtered_df = filtered_df[filtered_df["brand"].isin(brand_filter)]
-        if pack_filter:
-            filtered_df = filtered_df[filtered_df["pack"].isin(pack_filter)]
-        if dataset_filter:
-            filtered_df = filtered_df[filtered_df["dataset_split"].isin(dataset_filter)]
-
-        # If no data after filtering, return empty figure
-        if len(filtered_df) == 0:
-            return go.Figure().update_layout(
-                title="No data matching filters",
-                xaxis={"visible": False},
-                yaxis={"visible": False},
-            )
-
-        # Aggregate by date and dataset_split
-        import pandas as pd
-
-        timeline_data = (
-            filtered_df.groupby(["date", "dataset_split"])
-            .agg({"actual_sales": "sum", "prediction": "sum"})
-            .reset_index()
-        )
-
-        # Create figure
-        fig = go.Figure()
-
-        # Color mapping for dataset splits
-        color_map = {"train": "#1f77b4", "val": "#ff7f0e", "test": "#2ca02c"}
-
-        # Add actual sales lines for each dataset split
-        for split in ["train", "val", "test"]:
-            split_data = timeline_data[timeline_data["dataset_split"] == split]
-            if len(split_data) > 0:
-                # Actual sales (solid line)
-                fig.add_trace(
-                    go.Scatter(
-                        x=split_data["date"],
-                        y=split_data["actual_sales"],
-                        mode="lines",
-                        name=f"Actual ({split})",
-                        line=dict(color=color_map[split], width=2),
-                        legendgroup=split,
-                    )
-                )
-                # Predicted sales (dashed line)
-                fig.add_trace(
-                    go.Scatter(
-                        x=split_data["date"],
-                        y=split_data["prediction"],
-                        mode="lines",
-                        name=f"Predicted ({split})",
-                        line=dict(color=color_map[split], width=2, dash="dash"),
-                        legendgroup=split,
-                    )
-                )
-
-        fig.update_layout(
-            title="Actual vs Predicted Sales Over Time",
-            xaxis_title="Date",
-            yaxis_title="Total Sales",
-            height=500,
-            hovermode="x unified",
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1,
-            ),
-        )
-
-        return fig
-
-    # =========================================================================
     # DYNAMIC METRICS TABLE CALLBACKS
     # =========================================================================
 
@@ -643,6 +446,180 @@ def register_callbacks(app, df):
             hover=True,
             responsive=True,
             className="mb-0",
+        )
+
+        return table
+
+    # =========================================================================
+    # ERROR ANALYSIS TABLE CALLBACKS
+    # =========================================================================
+
+    # Error Table: Update all filter options based on current selections
+    @app.callback(
+        [
+            Output("error-table-filter-region", "options"),
+            Output("error-table-filter-state", "options"),
+            Output("error-table-filter-segment", "options"),
+            Output("error-table-filter-brand", "options"),
+            Output("error-table-filter-pack", "options"),
+        ],
+        [
+            Input("error-table-filter-region", "value"),
+            Input("error-table-filter-state", "value"),
+            Input("error-table-filter-segment", "value"),
+            Input("error-table-filter-brand", "value"),
+            Input("error-table-filter-pack", "value"),
+        ],
+    )
+    def update_error_filter_options(region_val, state_val, segment_val, brand_val, pack_val):
+        """Update all filter options based on current selections."""
+        # Start with full dataset
+        filtered_df = df.copy()
+
+        # Apply filters to get valid combinations
+        if region_val:
+            filtered_df = filtered_df[filtered_df["region"] == region_val]
+        if state_val:
+            filtered_df = filtered_df[filtered_df["state"] == state_val]
+        if segment_val:
+            filtered_df = filtered_df[filtered_df["segment"] == segment_val]
+        if brand_val:
+            filtered_df = filtered_df[filtered_df["brand"] == brand_val]
+        if pack_val:
+            filtered_df = filtered_df[filtered_df["pack"] == pack_val]
+
+        # Get available options for each filter based on filtered data
+        region_options = [{"label": r, "value": r} for r in sorted(filtered_df["region"].unique())]
+        state_options = [{"label": s, "value": s} for s in sorted(filtered_df["state"].unique())]
+        segment_options = [{"label": s, "value": s} for s in sorted(filtered_df["segment"].unique())]
+        brand_options = [{"label": b, "value": b} for b in sorted(filtered_df["brand"].unique())]
+        pack_options = [{"label": p, "value": p} for p in sorted(filtered_df["pack"].unique())]
+
+        return region_options, state_options, segment_options, brand_options, pack_options
+
+    # Reset button callback
+    @app.callback(
+        [
+            Output("error-table-filter-region", "value"),
+            Output("error-table-filter-state", "value"),
+            Output("error-table-filter-segment", "value"),
+            Output("error-table-filter-brand", "value"),
+            Output("error-table-filter-pack", "value"),
+        ],
+        Input("error-table-reset-button", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def reset_error_filters(n_clicks):
+        """Reset all error table filters."""
+        return None, None, None, None, None
+
+    # Update the error analysis table
+    @app.callback(
+        Output("error-analysis-table", "children"),
+        [
+            Input("error-table-filter-region", "value"),
+            Input("error-table-filter-state", "value"),
+            Input("error-table-filter-segment", "value"),
+            Input("error-table-filter-brand", "value"),
+            Input("error-table-filter-pack", "value"),
+        ],
+    )
+    def update_error_analysis_table(region_filter, state_filter, segment_filter, brand_filter, pack_filter):
+        """Update error analysis table based on filters."""
+        import pandas as pd
+        import dash_bootstrap_components as dbc
+        from sklearn.metrics import r2_score
+
+        # Start with full dataset
+        filtered_df = df.copy()
+
+        # Apply filters (single-select, so direct comparison)
+        if region_filter:
+            filtered_df = filtered_df[filtered_df["region"] == region_filter]
+        if state_filter:
+            filtered_df = filtered_df[filtered_df["state"] == state_filter]
+        if segment_filter:
+            filtered_df = filtered_df[filtered_df["segment"] == segment_filter]
+        if brand_filter:
+            filtered_df = filtered_df[filtered_df["brand"] == brand_filter]
+        if pack_filter:
+            filtered_df = filtered_df[filtered_df["pack"] == pack_filter]
+
+        if len(filtered_df) == 0:
+            return html.Div(
+                "No data available for selected filters",
+                className="text-center text-muted my-4",
+            )
+
+        # Calculate metrics for each split
+        metrics_data = []
+
+        for split in ["train", "val", "test"]:
+            split_df = filtered_df[filtered_df["dataset_split"] == split]
+
+            if len(split_df) == 0:
+                continue
+
+            actuals = split_df["actual_sales"].values
+            preds = split_df["prediction"].values
+            errors = split_df["error"].values
+
+            # Calculate comprehensive error metrics
+            mae = np.abs(errors).mean()
+            rmse = np.sqrt((errors ** 2).mean())
+
+            # MAPE (excluding very small values to avoid division issues)
+            mask = actuals >= 50
+            if mask.sum() > 0:
+                mape = (np.abs(errors[mask]) / actuals[mask]).mean() * 100
+                mape_coverage = mask.sum() / len(actuals) * 100
+            else:
+                mape = np.nan
+                mape_coverage = 0
+
+            # Bias (mean error)
+            bias = errors.mean()
+            bias_pct = (bias / actuals.mean()) * 100 if actuals.mean() > 0 else np.nan
+
+            # R² Score
+            if len(actuals) > 1 and actuals.std() > 0:
+                r2 = r2_score(actuals, preds)
+            else:
+                r2 = np.nan
+
+            # Mean Absolute Error as % of mean actual
+            mae_pct = (mae / actuals.mean()) * 100 if actuals.mean() > 0 else np.nan
+
+            metrics_data.append({
+                "Dataset": split.upper(),
+                "Records": f"{len(split_df):,}",
+                "MAE": f"{mae:.2f}",
+                "MAE (%)": f"{mae_pct:.2f}%" if not np.isnan(mae_pct) else "N/A",
+                "RMSE": f"{rmse:.2f}",
+                "MAPE": f"{mape:.2f}%" if not np.isnan(mape) else "N/A",
+                "MAPE Coverage": f"{mape_coverage:.1f}%" if not np.isnan(mape) else "N/A",
+                "Bias": f"{bias:+.2f}",
+                "Bias (%)": f"{bias_pct:+.2f}%" if not np.isnan(bias_pct) else "N/A",
+                "R²": f"{r2:.4f}" if not np.isnan(r2) else "N/A",
+            })
+
+        if not metrics_data:
+            return html.Div(
+                "Insufficient data to calculate metrics",
+                className="text-center text-muted my-4",
+            )
+
+        metrics_df = pd.DataFrame(metrics_data)
+
+        # Create formatted table
+        table = dbc.Table.from_dataframe(
+            metrics_df,
+            striped=True,
+            bordered=True,
+            hover=True,
+            responsive=True,
+            className="mb-0 text-center",
+            style={"fontSize": "0.9rem"},
         )
 
         return table
