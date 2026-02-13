@@ -3,14 +3,14 @@ import sys
 sys.path.append(".")
 
 import torch
-import config
-from data.preprocessor import DataPreprocessor
-from data.dataset import HierarchicalDataset
 from torch.utils.data import DataLoader
-from models.hierarchical_model import HierarchicalModel
-from training.trainer import Trainer
-from training.metrics import calculate_metrics
+
 import config
+from hier_reg.data.dataset import HierarchicalDataset
+from hier_reg.data.preprocessor import DataPreprocessor
+from hier_reg.models.hierarchical_model import HierarchicalModel
+from hier_reg.training.metrics import calculate_metrics
+from hier_reg.training.trainer import Trainer
 
 torch.manual_seed(config.RANDOM_SEED)
 
@@ -124,7 +124,7 @@ def main():
     )
     print(f"Model trainable paraterms: {trainable_params:,}")
     print(f"Optimizer parameters: {optimizer_params:,}")
-    print(f"Match={trainable_params==optimizer_params}")
+    print(f"Match={trainable_params == optimizer_params}")
     if config.USE_MULTIPLICATIVE_INTERACTIONS:
         proj_params = sum(p.numel() for p in model.emb_projection.parameters())
         print(f"Projectio layer paramters: {proj_params:,}")

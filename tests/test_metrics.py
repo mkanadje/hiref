@@ -7,7 +7,7 @@ import sys
 
 sys.path.append(".")
 
-from training.metrics import (
+from hier_reg.training.metrics import (
     calculate_metrics,
     mse,
     rmse,

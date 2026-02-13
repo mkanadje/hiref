@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import config
+from hier_reg.models.constrained_linear import ConstrainedLinear
 
 
 class Trainer:
@@ -56,6 +58,19 @@ class Trainer:
 
             # 5. Calculate loss
             loss = self.criterion(predictions, targets)
+            if hasattr(self.model, "use_interactions") and self.model.use_interactions:
+                if config.INTERACTION_L2_LAMBDA > 0:
+                    if isinstance(self.model.linear, ConstrainedLinear):
+                        all_weights = (
+                            self.model.linear.get_constrained_weights().squeeze()
+                        )
+                    else:
+                        all_weights = self.model.linear.weights().squeeze()
+                    total_embedding_dim = sum(self.model.embedding_dims.values())
+                    interaction_start = total_embedding_dim + self.model.n_features
+                    interaction_weights = all_weights[interaction_start:]
+                    interaction_l2 = torch.sum(interaction_weights**2)
+                    loss = loss + config.INTERACTION_L2_LAMBDA * interaction_l2
 
             # 6. Backward pass
             loss.backward()
@@ -96,7 +111,7 @@ class Trainer:
         all_predictions = torch.cat(all_predictions, dim=0)
         all_targets = torch.cat(all_targets, dim=0)
 
-        from training.metrics import calculate_metrics
+        from hier_reg.training.metrics import calculate_metrics
 
         metrics = calculate_metrics(
             all_predictions,
@@ -127,9 +142,9 @@ class Trainer:
             "val_metrics": [],
         }
         for epoch in range(self.num_epochs):
-            print(f"\n{'='*50}")
+            print(f"\n{'=' * 50}")
             print(f"Epoch {epoch + 1} / {self.num_epochs}")
-            print(f"{'='*50}")
+            print(f"{'=' * 50}")
             train_loss = self.train_epoch()
             print(f"Train Loss: {train_loss:.4f}")
             val_loss, val_metrics = self.validate_epoch()
@@ -152,10 +167,10 @@ class Trainer:
                 )
 
             if patience_counter >= self.early_stopping_patience:
-                print(f"\n{'='*50}")
+                print(f"\n{'=' * 50}")
                 print(f"Early stopping triggered at epoch {epoch + 1}")
                 print(f"Best validation loss: {best_val_loss:.4f}")
-                print(f"{'='*50}")
+                print(f"{'=' * 50}")
                 break
             history["train_loss"].append(train_loss)
             history["val_loss"].append(val_loss)

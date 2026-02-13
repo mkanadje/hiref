@@ -1,6 +1,7 @@
-from data.preprocessor import DataPreprocessor
-from models.hierarchical_model import HierarchicalModel
+from hier_reg.data.preprocessor import DataPreprocessor, GroupScaler
+from hier_reg.models.hierarchical_model import HierarchicalModel
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, FunctionTransformer
+from copy import deepcopy
 import config
 import torch
 from tqdm import tqdm
@@ -125,9 +126,17 @@ class Predictor:
 
         # Step 4: Inverse transform prediction to original scale
         predictions_scaled_np = predictions_scaled.cpu().numpy().reshape(1, -1)
-        prediction_original = self.preprocessor.target_scaler.inverse_transform(
-            predictions_scaled_np
-        ).flatten()[0]
+        predictions_scaled_dict = deepcopy(sku_dict)
+        predictions_scaled_dict[self.preprocessor.target_col] = predictions_scaled_np
+        predictions_scaled_df = pd.DataFrame(predictions_scaled_dict)
+        if isinstance(self.preprocessor.target_scaler, GroupScaler):
+            prediction_original = self.preprocessor.target_scaler.inverse_transform(
+                predictions_scaled_df, self.target_col
+            ).values.flatten()
+        else:
+            raise ValueError(
+                f"{self.preprocessor.target_scaler} is not supported. You have to use GroupScaler"
+            )
 
         # Step 5: Extract contribution in the scaled space
         bias = contributions["bias_contribution"]
@@ -271,9 +280,19 @@ class Predictor:
             encoded_ids = self.preprocessor.label_encoders[col].transform(values)
             hierarchy_ids[col] = torch.tensor(encoded_ids, dtype=torch.long)
         # Step 3: Batch extract and scale features
-        feature_df = sku_df[self.feature_cols]
-        scaled_features = self.preprocessor.feature_scaler.transform(feature_df)
-        features = torch.tensor(scaled_features, dtype=torch.float32)
+        # feature_df = sku_df[self.feature_cols]
+        scaled_features = {}
+        for feat in self.feature_cols:
+            if feat in self.preprocessor.feature_config:
+                scaled_features[feat] = self.preprocessor.feature_scaler[
+                    feat
+                ].transform(sku_df, feat)
+            else:
+                scaled_features[feat] = sku_df[[feat]].values.flatten()
+        scaled_features = pd.DataFrame(scaled_features)
+        scaled_features = scaled_features[self.feature_cols]
+        # scaled_features = self.preprocessor.feature_scaler.transform(feature_df)
+        features = torch.tensor(scaled_features.to_numpy(), dtype=torch.float32)
         # Step 4: Move all tensors to device at once
         for col in self.hierarchy_cols:
             hierarchy_ids[col] = hierarchy_ids[col].to(self.device)
@@ -288,9 +307,15 @@ class Predictor:
         prediction_scaled_np = (
             prediction_scaled.cpu().numpy().reshape(-1, 1)
         )  # (batch_size, 1)
-        predictions_original = self.preprocessor.target_scaler.inverse_transform(
-            prediction_scaled_np
-        ).flatten()
+        if isinstance(self.preprocessor.target_scaler, GroupScaler):
+            sku_df[self.preprocessor.target_col] = prediction_scaled_np
+            predictions_original = self.preprocessor.target_scaler.inverse_transform(
+                sku_df, self.target_col
+            ).values.flatten()
+        else:
+            predictions_original = self.preprocessor.target_scaler.inverse_transform(
+                prediction_scaled_np
+            ).flatten()
 
         # Step 7: Extract batched contribution
         bias = contributions["bias_contribution"]

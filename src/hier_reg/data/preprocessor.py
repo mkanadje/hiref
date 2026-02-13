@@ -1,9 +1,11 @@
 import pandas as pd
+from typing import List
+from sklearn.base import clone
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
 import pickle
 import config
-from data.constraint_helper import get_constraint_indices
+from hier_reg.data.constraint_helper import get_constraint_indices
 
 
 class DataPreprocessor:
@@ -16,10 +18,12 @@ class DataPreprocessor:
 
         # Each hierarchy to be encoded
         self.label_encoders = {}
-        self.feature_scaler = config.FEATURE_SCALER
-        self.target_scaler = config.TARGET_SCALER
+        self.feature_scaler = {}
+        self.target_scaler = None
         self.vocab_sizes = {}
         self.constraint_indices = None
+        self.feature_config = config.FEATURE_CONFIG
+        self.target_config = config.TARGET_CONFIG
 
     def load_data(self, file_path):
         df = pd.read_csv(file_path)
@@ -40,15 +44,29 @@ class DataPreprocessor:
             self.label_encoders[col] = le
             self.vocab_sizes[col] = len(le.classes_)
 
+        for col in self.feature_cols:
+            if col in self.feature_config.keys():
+                base = self.feature_config[col]["scaler"]
+                groups = self.feature_config[col]["groups"]
+                self.feature_scaler[col] = GroupScaler(base, groups)
+                self.feature_scaler[col].fit(df, col)
+
+        target_base = self.target_config["scaler"]
+        target_groups = self.target_config["groups"]
+        if not target_groups:
+            self.target_scaler = clone(target_base).fit(df[[self.target_col]])
+        else:
+            self.target_scaler = GroupScaler(target_base, target_groups).fit(df)
+
         # Fit StandardScaler for features
         # self.feature_scaler = StandardScaler()
         # self.feature_scaler = MinMaxScaler()
-        self.feature_scaler.fit(df[self.feature_cols])
+        # self.feature_scaler.fit(df[self.feature_cols])
 
         # Fit StandarScaler to target
         # self.target_scaler = StandardScaler()
         # self.target_scaler = MinMaxScaler()
-        self.target_scaler.fit(df[[self.target_col]])
+        # self.target_scaler.fit(df[[self.target_col]])
 
         # Compute constraint indices if constraints are enabled
         if config.USE_CONSTRAINT_WEIGHTS:
@@ -83,8 +101,21 @@ class DataPreprocessor:
         hierarchy_ids = {
             c: self.label_encoders[c].transform(df[c]) for c in self.hierarchy_cols
         }
-        features = self.feature_scaler.transform(df[self.feature_cols])
-        targets = self.target_scaler.transform(df[[self.target_col]])
+        features = {}
+        for feature in self.feature_cols:
+            if feature in self.feature_config.keys():
+                features[feature] = self.feature_scaler[feature].transform(df, feature)
+            else:
+                features[feature] = df[[feature]].values.flatten()
+        features = pd.DataFrame(features).to_numpy()
+        # features = self.feature_scaler.transform(df[self.feature_cols])
+        if isinstance(self.target_scaler, GroupScaler):
+            targets = self.target_scaler.transform(df, self.target_col)
+        else:
+            targets = self.target_scaler.transform(
+                df[[self.target_col]]
+            ).values.flatten()
+
         if isinstance(targets, pd.DataFrame):
             targets = targets.values
         targets = targets.flatten()
@@ -125,6 +156,8 @@ class DataPreprocessor:
                     "target_col": self.target_col,
                     "key_col": self.key_col,
                     "date_col": self.date_col,
+                    "feature_config": self.feature_config,
+                    "target_config": self.target_config,
                 },
                 f,
             )
@@ -162,7 +195,81 @@ class DataPreprocessor:
         instance.target_col = state.get("target_col", None)
         instance.key_col = state.get("key_col", None)
         instance.date_col = state.get("date_col", None)
+        instance.feature_config = state.get("feature_config", None)
+        instance.target_config = state.get("target_config", None)
         return instance
 
     def get_vocab_sizes(self):
         return self.vocab_sizes
+
+
+class GroupScaler:
+    """
+    Creates and manages features and target scaler at the required level of input groups
+    """
+
+    def __init__(self, base_scaler, groups: List[str]):
+        self.base_scaler = clone(base_scaler)
+        self.groups = groups
+        self.scalers = {}
+        self.params = {}
+
+    def _get_group_key(self, row):
+        return tuple(row[group] for group in self.groups)
+
+    def _extract_params(self, scaler):
+        if isinstance(scaler, StandardScaler):
+            return {"mean": scaler.mean_[0], "scale": scaler.scale_[0]}
+        elif isinstance(scaler, MinMaxScaler):
+            return {"min": scaler.min_[0], "scale": scaler.scale_[0]}
+        return {}
+
+    def fit(self, df, col_name):
+        self.base_scaler.fit(df[[col_name]])
+        grouped_data = df.groupby(self.groups)[col_name]
+        for name, group in grouped_data:
+            scaler = clone(self.base_scaler)
+            scaler.fit(group.values.reshape(-1, 1))
+            self.scalers[name] = scaler
+            self.params[name] = self._extract_params(scaler)
+        return self
+
+    def transform(self, df, col_name):
+        if len(self.groups) == 1:
+            keys = df[self.groups[0]]
+        else:
+            keys = df[self.groups].apply(tuple, axis=1)
+        default_params = self._extract_params(self.base_scaler)
+        if isinstance(self.base_scaler, StandardScaler):
+            self.means = keys.map(lambda k: self.params.get(k, default_params)["mean"])
+            self.scales = keys.map(
+                lambda k: self.params.get(k, default_params)["scale"]
+            )
+            return ((df[col_name] - self.means) / self.scales).values
+        elif isinstance(self.base_scaler, MinMaxScaler):
+            self.mins = keys.map(lambda k: self.params.get(k, default_params)["min"])
+            self.scales = keys.map(
+                lambda k: self.params.get(k, default_params)["scale"]
+            )
+            return ((df[col_name] * self.scales) + self.mins).values
+        else:
+            raise ValueError(f"{self.base_scaler} has been implemented yet")
+
+    def inverse_transform(self, df, col_name):
+        if len(self.groups) == 1:
+            keys = df[self.groups[0]]
+        else:
+            keys = df[self.groups].apply(tuple, axis=1)
+        default_params = self._extract_params(self.base_scaler)
+        if isinstance(self.base_scaler, StandardScaler):
+            means = keys.map(lambda k: self.params.get(k, default_params)["mean"])
+            scales = keys.map(lambda k: self.params.get(k, default_params)["scale"])
+            return (df[col_name] * scales) + means
+        if isinstance(self.base_scaler, MinMaxScaler):
+            mins = keys.map(lambda k: self.params.get(k, default_params)["min"])
+            scales = keys.map(lambda k: self.params.get(k, default_params)["scale"])
+            return (df[col_name] - mins) / scales
+        else:
+            raise ValueError(
+                f"{self.base_scaler} has not been implemented yet for inverse transform"
+            )

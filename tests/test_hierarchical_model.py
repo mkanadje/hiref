@@ -4,7 +4,7 @@ import pytest
 import torch
 import torch.nn as nn
 import numpy as np
-from models.hierarchical_model import HierarchicalModel
+from hier_reg.models.hierarchical_model import HierarchicalModel
 from config import EMBEDDING_DIMS, HIERARCHY_COLS, FEATURE_COLS
 
 # =============================================================================

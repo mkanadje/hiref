@@ -13,7 +13,7 @@ sys.path.append(".")
 
 import pandas as pd
 import numpy as np
-from inference.predictor import Predictor
+from hier_reg.inference.predictor import Predictor
 import config
 import os
 

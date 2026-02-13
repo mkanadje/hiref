@@ -4,7 +4,7 @@ import pytest
 import pandas as pd
 import numpy as np
 import os
-from data.preprocessor import DataPreprocessor
+from hier_reg.data.preprocessor import DataPreprocessor
 
 # =============================================================================
 # FIXTURES
@@ -218,13 +218,18 @@ def test_transform_encoded_ids_valid(preprocessor, sample_df):
 
 def test_transform_features_scaled(preprocessor, sample_df):
     """Test that features are scaled to [0, 1] range using MinMaxScaler"""
-    df = preprocessor.create_key_column(sample_df.copy())
+    use_col = list(preprocessor.feature_config.keys())
+    use_col.extend(preprocessor.hierarchy_cols)
+    use_col.extend([preprocessor.target_col])
+    df = sample_df[use_col]
+    df = preprocessor.create_key_column(df.copy())
     preprocessor.fit(df)
     _, features, _, _ = preprocessor.transform(df)
 
     # Check MinMaxScaler properties: features should be in [0, 1] range
-    assert features.min() >= 0.0
-    assert features.max() <= 1.0
+    # Allow small tolerance for floating-point precision
+    assert features.min() >= -1e-10
+    assert features.max() <= 1.0 + 1e-10
     # For uniform random data, mean should be approximately 0.5
     assert np.abs(features.mean() - 0.5) < 0.2  # Allow some variance
 

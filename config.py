@@ -50,6 +50,27 @@ TARGET_COL = "sales"
 KEY_COL = "sku_key"
 DATE_COL = "date"
 
+FEATURE_CONFIG = {
+    "price": {
+        "scaler": MinMaxScaler(),
+        "groups": HIERARCHY_COLS,
+    },
+    "temperature": {
+        "scaler": MinMaxScaler(),
+        "groups": ["state"],
+    },
+    "tv_spend": {
+        "scaler": MinMaxScaler(),
+        "groups": ["region"],
+    },
+}
+
+TARGET_CONFIG = {
+    "col": "sales",
+    "scaler": FunctionTransformer(validate=False),
+    "groups": [],
+}
+
 # =============================================================================
 # TRAIN/VAL/TEST SPLIT (Chronological)
 # =============================================================================
@@ -115,3 +136,6 @@ TARGET_SCALER = FunctionTransformer(validate=False)
 # TARGET_SCALER = MinMaxScaler()
 
 BASELINE_INITIALIZATION = 0.6
+
+# Interaction regularization to prevent interactions from overwhelming base effects
+INTERACTION_L2_LAMBDA = 1000  # L2 (Ridge) penalty strength on interaction weights

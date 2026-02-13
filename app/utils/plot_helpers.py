@@ -51,6 +51,7 @@ def plot_actual_vs_predicted(df, sample_size=10000):
         labels={"actual_sales": "Actual Sales", "prediction": "Predicted Sales"},
         title="Actual vs Predicted Sales",
         hover_data=["sku_key", "date", "error"],
+        template="plotly_white",
     )
 
     # Add 45-degree reference line
@@ -67,7 +68,7 @@ def plot_actual_vs_predicted(df, sample_size=10000):
         )
     )
 
-    fig.update_layout(height=500, showlegend=True)
+    fig.update_layout(height=500, showlegend=True, template="plotly_white")
 
     return fig
 

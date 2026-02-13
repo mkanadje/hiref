@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from models.constrained_linear import ConstrainedLinear
+from hier_reg.models.constrained_linear import ConstrainedLinear
 
 
 class HierarchicalModel(nn.Module):
