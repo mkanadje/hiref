@@ -2,6 +2,8 @@
 
 **HiReF** is a hierarchical forecasting tool designed for FMCG (Fast-Moving Consumer Goods) data. It leverages learned embeddings for hierarchy levels (Region, State, Segment, Brand, Pack) combined with numerical features to predict sales across thousands of SKUs.
 
+![Hierarchical Modelling](./docs/hierarchical_modelling.png)
+![Constraint Modelling](./docs/constraint%20_modelling.png)
 ## Features
 
 *   **Hierarchical Embeddings**: Learns shared representations for categorical hierarchies to capture cross-SKU patterns.
